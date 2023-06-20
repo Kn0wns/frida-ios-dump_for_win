@@ -1,58 +1,29 @@
 # frida-ios-dump
-Pull a decrypted IPA from a jailbroken device
+从越狱设备中提取解密的IPA
+
+## Change
+1. 修改为中文提示
+2. 优化默认配置信息, 无需端口转发
+3. 适配 Windows API 调用
+4. 去除依赖 `frida-tools` 避免自动更新 `frida` 版本
 
 
 ## Usage
 
- 1. Install [frida](http://www.frida.re/) on device
- 2. `sudo pip install -r requirements.txt --upgrade`
- 3. Run usbmuxd/iproxy SSH forwarding over USB (Default 2222 -> 22). e.g. `iproxy 2222 22`
- 4. Run ./dump.py `Display name` or `Bundle identifier`
-
-For SSH/SCP make sure you have your public key added to the target device's ~/.ssh/authorized_keys file.
-
+ 1. 在设备上安装 [frida](http://www.frida.re/)
+ 2. 安装所需依赖 `sudo pip install -r requirements.txt --upgrade`
+ 3. 执行脚本 `./dump.py [应用名称|包名]`
 ```
-./dump.py Aftenposten
-Start the target app Aftenposten
-Dumping Aftenposten to /var/folders/wn/9v1hs8ds6nv_xj7g95zxyl140000gn/T
-start dump /var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/AftenpostenApp
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/AFNetworking.framework/AFNetworking
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/ATInternet_iOS_ObjC_SDK.framework/ATInternet_iOS_ObjC_SDK
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/SPTEventCollector.framework/SPTEventCollector
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/SPiDSDK.framework/SPiDSDK
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftCore.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftCoreData.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftCoreGraphics.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftCoreImage.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftCoreLocation.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftDarwin.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftDispatch.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftFoundation.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftObjectiveC.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftQuartzCore.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftUIKit.dylib
-Generating Aftenposten.ipa
+~frida-ios-dump_for_win〉python dump.py 嘟嘟牛 -P root -H 192.168.1.7
+Dumping 嘟嘟牛 to C:\Users\ADMINI~1\AppData\Local\Temp
+start dump /var/containers/Bundle/Application/FDAFF301-F24F-410F-9690-59D2CB91E793/DoDoNew.app/DoDoNew
+------------------------------
 
-Done.
+已生成 嘟嘟牛.ipa
 ```
-
-Congratulations!!! You've got a decrypted IPA file.
 
 Drag to [MonkeyDev](https://github.com/AloneMonkey/MonkeyDev), Happy hacking!
 
 ## Support
 
 Python 2.x and 3.x
-
-
-### issues
-
-If the following error occurs:
-
-* causes device to reboot
-* lost connection
-* unexpected error while probing dyld of target process
-
-please open the application before dumping.
-
-

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Author : AloneMonkey
+# Author : KK
 # blog: www.alonemonkey.com
 
 from __future__ import print_function
@@ -12,7 +12,6 @@ import frida
 import threading
 import os
 import shutil
-import time
 import argparse
 import tempfile
 import subprocess
@@ -22,6 +21,10 @@ from paramiko import SSHClient
 from scp import SCPClient
 from tqdm import tqdm
 import traceback
+import zipfile
+
+# 系统环境判断
+SYSTEM_ENV = sys.platform == 'win32'
 
 IS_PY2 = sys.version_info[0] < 3
 if IS_PY2:
@@ -35,7 +38,7 @@ DUMP_JS = os.path.join(script_dir, 'dump.js')
 User = 'root'
 Password = 'alpine'
 Host = 'localhost'
-Port = 2222
+Port = 22
 KeyFileName = None
 
 TEMP_DIR = tempfile.gettempdir()
@@ -62,7 +65,7 @@ def get_usb_iphone():
     while device is None:
         devices = [dev for dev in device_manager.enumerate_devices() if dev.type == Type]
         if len(devices) == 0:
-            print('Waiting for USB device...')
+            print('等待 USB 设备...')
             changed.wait()
         else:
             device = devices[0]
@@ -72,10 +75,28 @@ def get_usb_iphone():
     return device
 
 
+def zip_folder(folder_path, output_path):
+    """
+    将指定目录压缩成zip文件，并保存到指定路径。
+
+    :param folder_path: 待压缩的目录路径。
+    :param output_path: 压缩包的输出路径。
+    """
+    # 创建ZipFile对象，并将待压缩文件写入到压缩包中
+    with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        # 将目录中的文件逐个添加到压缩包中
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                abs_path = os.path.join(root, file)
+                root_path = os.path.abspath(os.path.join(folder_path, os.pardir))
+                rel_path = os.path.relpath(abs_path, root_path)
+                zip_file.write(abs_path, rel_path)
+
+
 def generate_ipa(path, display_name):
     ipa_filename = display_name + '.ipa'
-
-    print('Generating "{}"'.format(ipa_filename))
+    print('\r' + '-' * 30)
+    print(f'已生成 {display_name}.ipa')
     try:
         app_name = file_dict['app']
 
@@ -85,16 +106,21 @@ def generate_ipa(path, display_name):
             if key != 'app':
                 shutil.move(from_dir, to_dir)
 
-        target_dir = './' + PAYLOAD_DIR
-        zip_args = ('zip', '-qr', os.path.join(os.getcwd(), ipa_filename), target_dir)
-        subprocess.check_call(zip_args, cwd=TEMP_DIR)
-        shutil.rmtree(PAYLOAD_PATH)
+        if SYSTEM_ENV:
+            zip_folder(path, os.path.join(os.getcwd(), ipa_filename))
+        else:
+            target_dir = './' + PAYLOAD_DIR
+            zip_args = ('zip', '-qr', os.path.join(os.getcwd(), ipa_filename), target_dir)
+            subprocess.check_call(zip_args, cwd=TEMP_DIR)
+            shutil.rmtree(PAYLOAD_PATH)
+
     except Exception as e:
         print(e)
         finished.set()
 
+
 def on_message(message, data):
-    t = tqdm(unit='B',unit_scale=True,unit_divisor=1024,miniters=1)
+    t = tqdm(unit='B', unit_scale=True, unit_divisor=1024, miniters=1)
     last_sent = [0]
 
     def progress(filename, size, sent):
@@ -116,15 +142,16 @@ def on_message(message, data):
             scp_from = dump_path
             scp_to = PAYLOAD_PATH + '/'
 
-            with SCPClient(ssh.get_transport(), progress = progress, socket_timeout = 60) as scp:
+            with SCPClient(ssh.get_transport(), progress=progress, socket_timeout=60) as scp:
                 scp.get(scp_from, scp_to)
 
-            chmod_dir = os.path.join(PAYLOAD_PATH, os.path.basename(dump_path))
-            chmod_args = ('chmod', '655', chmod_dir)
-            try:
-                subprocess.check_call(chmod_args)
-            except subprocess.CalledProcessError as err:
-                print(err)
+            if not SYSTEM_ENV:
+                chmod_dir = os.path.join(PAYLOAD_PATH, os.path.basename(dump_path))
+                chmod_args = ('chmod', '655', chmod_dir)
+                try:
+                    subprocess.check_call(chmod_args)
+                except subprocess.CalledProcessError as err:
+                    print(err)
 
             index = origin_path.find('.app/')
             file_dict[os.path.basename(dump_path)] = origin_path[index + 5:]
@@ -134,21 +161,23 @@ def on_message(message, data):
 
             scp_from = app_path
             scp_to = PAYLOAD_PATH + '/'
-            with SCPClient(ssh.get_transport(), progress = progress, socket_timeout = 60) as scp:
+            with SCPClient(ssh.get_transport(), progress=progress, socket_timeout=60) as scp:
                 scp.get(scp_from, scp_to, recursive=True)
 
-            chmod_dir = os.path.join(PAYLOAD_PATH, os.path.basename(app_path))
-            chmod_args = ('chmod', '755', chmod_dir)
-            try:
-                subprocess.check_call(chmod_args)
-            except subprocess.CalledProcessError as err:
-                print(err)
+            if not SYSTEM_ENV:
+                chmod_dir = os.path.join(PAYLOAD_PATH, os.path.basename(app_path))
+                chmod_args = ('chmod', '755', chmod_dir)
+                try:
+                    subprocess.check_call(chmod_args)
+                except subprocess.CalledProcessError as err:
+                    print(err)
 
             file_dict['app'] = os.path.basename(app_path)
 
         if 'done' in payload:
             finished.set()
     t.close()
+
 
 def compare_applications(a, b):
     a_is_running = a.pid != 0
@@ -198,7 +227,7 @@ def get_applications(device):
     try:
         applications = device.enumerate_applications()
     except Exception as e:
-        sys.exit('Failed to enumerate applications: %s' % e)
+        sys.exit('未能枚举应用程序: %s' % e)
 
     return applications
 
@@ -251,7 +280,7 @@ def create_dir(path):
 
 
 def open_target_app(device, name_or_bundleid):
-    print('Start the target app {}'.format(name_or_bundleid))
+    # print('启动应用 {}'.format(name_or_bundleid))
 
     pid = ''
     session = None
@@ -271,7 +300,7 @@ def open_target_app(device, name_or_bundleid):
         else:
             session = device.attach(pid)
     except Exception as e:
-        print(e) 
+        print(e)
 
     return session, display_name, bundle_identifier
 
@@ -290,15 +319,15 @@ def start_dump(session, ipa_name):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='frida-ios-dump (by AloneMonkey v2.0)')
-    parser.add_argument('-l', '--list', dest='list_applications', action='store_true', help='List the installed apps')
-    parser.add_argument('-o', '--output', dest='output_ipa', help='Specify name of the decrypted IPA')
-    parser.add_argument('-H', '--host', dest='ssh_host', help='Specify SSH hostname')
-    parser.add_argument('-p', '--port', dest='ssh_port', help='Specify SSH port')
-    parser.add_argument('-u', '--user', dest='ssh_user', help='Specify SSH username')
-    parser.add_argument('-P', '--password', dest='ssh_password', help='Specify SSH password')
-    parser.add_argument('-K', '--key_filename', dest='ssh_key_filename', help='Specify SSH private key file path')
-    parser.add_argument('target', nargs='?', help='Bundle identifier or display name of the target app')
+    parser = argparse.ArgumentParser(description='frida-ios-dump (by KK v3.0)')
+    parser.add_argument('-l', '--list', dest='list_applications', action='store_true', help='列出已安装的应用程序')
+    parser.add_argument('-o', '--output', dest='output_ipa', help='指定解密 IPA 名称')
+    parser.add_argument('-H', '--host', dest='ssh_host', help='设置 SSH 主机地址')
+    parser.add_argument('-p', '--port', dest='ssh_port', help='设置 SSH 端口')
+    parser.add_argument('-u', '--user', dest='ssh_user', help='设置 SSH 用户名')
+    parser.add_argument('-P', '--password', dest='ssh_password', help='设置 SSH 密码')
+    parser.add_argument('-K', '--key_filename', dest='ssh_key_filename', help='设置 SSH 私钥文件路径')
+    parser.add_argument('target', nargs='?', help='Bundle 标识符或目标应用的显示名称')
 
     args = parser.parse_args()
 
@@ -316,7 +345,7 @@ if __name__ == '__main__':
     else:
         name_or_bundleid = args.target
         output_ipa = args.output_ipa
-        # update ssh args
+        # 设置 SSH 参数
         if args.ssh_host:
             Host = args.ssh_host
         if args.ssh_port:
@@ -329,7 +358,7 @@ if __name__ == '__main__':
             KeyFileName = args.ssh_key_filename
 
         try:
-            ssh = paramiko.SSHClient()
+            ssh = SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             ssh.connect(Host, port=Port, username=User, password=Password, key_filename=KeyFileName)
 
@@ -342,14 +371,14 @@ if __name__ == '__main__':
                 start_dump(session, output_ipa)
         except paramiko.ssh_exception.NoValidConnectionsError as e:
             print(e)
-            print('Try specifying -H/--hostname and/or -p/--port')
+            print('尝试指定 -H/--hostname 或 -p/--port')
             exit_code = 1
         except paramiko.AuthenticationException as e:
             print(e)
-            print('Try specifying -u/--username and/or -P/--password')
+            print('尝试指定 -u/--username 或 -P/--password')
             exit_code = 1
         except Exception as e:
-            print('*** Caught exception: %s: %s' % (e.__class__, e))
+            print('*** 异常信息: %s: %s' % (e.__class__, e))
             traceback.print_exc()
             exit_code = 1
 
