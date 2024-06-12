@@ -54,7 +54,7 @@ finished = threading.Event()
 
 def delete_directory(dir_path):
     """
-    尝试删除指定的目录。如果遇到权限错误，将打印错误信息。
+    尝试删除指定的目录。如果使用Python的shutil库失败，将尝试使用命令行rmdir命令。
 
     参数:
     dir_path (str): 要删除的目录的路径。
@@ -64,9 +64,17 @@ def delete_directory(dir_path):
         shutil.rmtree(dir_path)
         print(f"目录 {dir_path} 已被成功删除。")
     except PermissionError as e:
-        # 捕获权限错误，并打印错误信息
-        print(f"删除目录 {dir_path} 时发生权限错误: {e}")
-        # 这里可以添加更多的错误处理逻辑，例如请求管理员权限或跳过该目录
+        # 如果是权限错误，尝试使用命令行删除
+        print(f"尝试使用命令行删除目录 {dir_path}，因为遇到了权限错误: {e}")
+        try:
+            # 构建命令行命令
+            command = ["cmd", "/c", "rmdir", "/s", "/q", dir_path]
+            # 使用 subprocess 执行命令行命令
+            subprocess.check_call(command)
+            print(f"目录 {dir_path} 已被命令行成功删除。")
+        except subprocess.CalledProcessError as e:
+            # 如果命令行执行失败，打印错误信息
+            print(f"使用命令行删除目录 {dir_path} 时失败: {e}")
     except Exception as e:
         # 捕获其他可能的异常，并打印错误信息
         print(f"删除目录 {dir_path} 时发生错误: {e}")
