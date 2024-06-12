@@ -24,7 +24,7 @@ import traceback
 import zipfile
 
 # 系统环境判断
-SYSTEM_ENV = sys.platform == 'win32'
+IS_WIN = sys.platform == 'win32'
 
 IS_PY2 = sys.version_info[0] < 3
 if IS_PY2:
@@ -41,13 +41,35 @@ Host = 'localhost'
 Port = 22
 KeyFileName = None
 
-TEMP_DIR = tempfile.gettempdir()
+if IS_WIN:
+    TEMP_DIR = os.path.join(os.environ['USERPROFILE'], 'Desktop')
+else:
+    TEMP_DIR = tempfile.gettempdir()
 PAYLOAD_DIR = 'Payload'
 PAYLOAD_PATH = os.path.join(TEMP_DIR, PAYLOAD_DIR)
+
 file_dict = {}
 
 finished = threading.Event()
 
+def delete_directory(dir_path):
+    """
+    尝试删除指定的目录。如果遇到权限错误，将打印错误信息。
+
+    参数:
+    dir_path (str): 要删除的目录的路径。
+    """
+    try:
+        # 尝试使用 shutil.rmtree 删除目录
+        shutil.rmtree(dir_path)
+        print(f"目录 {dir_path} 已被成功删除。")
+    except PermissionError as e:
+        # 捕获权限错误，并打印错误信息
+        print(f"删除目录 {dir_path} 时发生权限错误: {e}")
+        # 这里可以添加更多的错误处理逻辑，例如请求管理员权限或跳过该目录
+    except Exception as e:
+        # 捕获其他可能的异常，并打印错误信息
+        print(f"删除目录 {dir_path} 时发生错误: {e}")
 
 def get_usb_iphone():
     Type = 'usb'
@@ -106,7 +128,7 @@ def generate_ipa(path, display_name):
             if key != 'app':
                 shutil.move(from_dir, to_dir)
 
-        if SYSTEM_ENV:
+        if IS_WIN:
             zip_folder(path, os.path.join(os.getcwd(), ipa_filename))
         else:
             target_dir = './' + PAYLOAD_DIR
@@ -145,7 +167,7 @@ def on_message(message, data):
             with SCPClient(ssh.get_transport(), progress=progress, socket_timeout=60) as scp:
                 scp.get(scp_from, scp_to)
 
-            if not SYSTEM_ENV:
+            if not IS_WIN:
                 chmod_dir = os.path.join(PAYLOAD_PATH, os.path.basename(dump_path))
                 chmod_args = ('chmod', '655', chmod_dir)
                 try:
@@ -164,7 +186,7 @@ def on_message(message, data):
             with SCPClient(ssh.get_transport(), progress=progress, socket_timeout=60) as scp:
                 scp.get(scp_from, scp_to, recursive=True)
 
-            if not SYSTEM_ENV:
+            if not IS_WIN:
                 chmod_dir = os.path.join(PAYLOAD_PATH, os.path.basename(app_path))
                 chmod_args = ('chmod', '755', chmod_dir)
                 try:
@@ -272,7 +294,8 @@ def create_dir(path):
     path = path.strip()
     path = path.rstrip('\\')
     if os.path.exists(path):
-        shutil.rmtree(path)
+        # shutil.rmtree(path)
+        delete_directory(PAYLOAD_PATH)
     try:
         os.makedirs(path)
     except os.error as err:
@@ -386,6 +409,7 @@ if __name__ == '__main__':
         ssh.close()
 
     if os.path.exists(PAYLOAD_PATH):
-        shutil.rmtree(PAYLOAD_PATH)
+        # shutil.rmtree(PAYLOAD_PATH)
+        delete_directory(PAYLOAD_PATH)
 
     sys.exit(exit_code)
